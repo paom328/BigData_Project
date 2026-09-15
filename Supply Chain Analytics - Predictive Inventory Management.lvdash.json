@@ -1,0 +1,1514 @@
+{
+  "datasets": [
+    {
+      "name": "risk_distribution",
+      "displayName": "Risk Distribution",
+      "queryLines": [
+        "SELECT\n",
+        "  CASE\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 7 THEN 'CRÍTICO - Menos de 7 días'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 15 THEN 'ALTO - 7-15 días'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 30 THEN 'MEDIO - 15-30 días'\n",
+        "    ELSE 'BAJO - Más de 30 días'\n",
+        "  END as nivel_riesgo,\n",
+        "  COUNT(*) as cantidad_sitios\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "GROUP BY\n",
+        "  1"
+      ]
+    },
+    {
+      "name": "department_risk_analysis",
+      "displayName": "Department Risk Analysis",
+      "queryLines": [
+        "SELECT\n",
+        "  DEPARTAMENTO,\n",
+        "  COUNT(*) as total_sitios,\n",
+        "  SUM(\n",
+        "    CASE\n",
+        "      WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 7 THEN 1\n",
+        "      ELSE 0\n",
+        "    END\n",
+        "  ) as sitios_criticos,\n",
+        "  ROUND(AVG(TRY_CAST(`SALDO DIAS` AS DOUBLE)), 1) as cobertura_promedio_dias,\n",
+        "  SUM(TRY_CAST(`SALDO ROLLOS` AS DOUBLE)) as inventario_total\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "GROUP BY\n",
+        "  DEPARTAMENTO\n",
+        "ORDER BY\n",
+        "  sitios_criticos DESC\n",
+        "LIMIT 15"
+      ]
+    },
+    {
+      "name": "executive_kpis",
+      "displayName": "Executive KPIs",
+      "queryLines": [
+        "SELECT\n",
+        "  COUNT(DISTINCT cncodpus) as total_sites_monitored,\n",
+        "  SUM(\n",
+        "    CASE\n",
+        "      WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 7 THEN 1\n",
+        "      ELSE 0\n",
+        "    END\n",
+        "  ) as sites_critical_risk,\n",
+        "  SUM(\n",
+        "    CASE\n",
+        "      WHEN `ACCIÓN` = 'REABASTECER' THEN 1\n",
+        "      ELSE 0\n",
+        "    END\n",
+        "  ) as sites_requiring_action,\n",
+        "  ROUND(SUM(TRY_CAST(`PPTO TRANSP` AS DOUBLE)) / 1000000, 2) as total_budget_millions_cop\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'"
+      ]
+    },
+    {
+      "name": "urgent_action_queue",
+      "displayName": "Urgent Action Queue",
+      "queryLines": [
+        "SELECT\n",
+        "  cncodpus,\n",
+        "  DEPARTAMENTO,\n",
+        "  MUNICIPIO,\n",
+        "  `SEDE ROLLOS` as sede_origen,\n",
+        "  TRY_CAST(`SALDO DIAS` AS DOUBLE) as dias_cobertura,\n",
+        "  ABS(TRY_CAST(`SALDO ROLLOS` AS DOUBLE)) as rollos_requeridos,\n",
+        "  TRY_CAST(`PPTO TRANSP` AS DOUBLE) as costo_transporte,\n",
+        "  DATE_ADD(\n",
+        "    CURRENT_DATE(),\n",
+        "    CAST(TRY_CAST(`SALDO DIAS` AS DOUBLE) AS INT)\n",
+        "  ) as fecha_estimada_desabastecimiento\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "  AND `ACCIÓN` = 'REABASTECER'\n",
+        "  AND TRY_CAST(`SALDO DIAS` AS DOUBLE) < 30\n",
+        "ORDER BY\n",
+        "  dias_cobertura ASC\n",
+        "LIMIT 50"
+      ]
+    },
+    {
+      "name": "coverage_trend",
+      "displayName": "Coverage Trend by Department",
+      "queryLines": [
+        "SELECT\n",
+        "  DEPARTAMENTO,\n",
+        "  ROUND(AVG(TRY_CAST(`SALDO DIAS` AS DOUBLE)), 1) as cobertura_promedio_dias,\n",
+        "  ROUND(AVG(TRY_CAST(`SALDO ROLLOS` AS DOUBLE)), 1) as promedio_rollos,\n",
+        "  30 as stock_seguridad_dias,\n",
+        "  COUNT(*) as total_pus,\n",
+        "  SUM(\n",
+        "    CASE\n",
+        "      WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 7 THEN 1\n",
+        "      ELSE 0\n",
+        "    END\n",
+        "  ) as pus_criticos\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "  AND TRY_CAST(`SALDO DIAS` AS DOUBLE) IS NOT NULL\n",
+        "GROUP BY\n",
+        "  DEPARTAMENTO\n",
+        "ORDER BY\n",
+        "  cobertura_promedio_dias ASC\n",
+        "LIMIT 20"
+      ]
+    },
+    {
+      "name": "coverage_by_typology",
+      "displayName": "Coverage by Typology",
+      "queryLines": [
+        "SELECT\n",
+        "  CASE\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) <= 0 THEN 'DESABASTECIDO'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) <= 5 THEN '1-5 D'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) <= 10 THEN '6-10 D'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) <= 15 THEN '11-15 D'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) <= 30 THEN '16-30 D'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) <= 60 THEN '31-60 D'\n",
+        "    ELSE '60+ D'\n",
+        "  END as rango_cobertura,\n",
+        "  COALESCE(`TIPOLOGIA OPERACIONES`, 'NO_DEFINIDO') as tipologia_operaciones,\n",
+        "  COUNT(*) as cantidad_pus\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "GROUP BY\n",
+        "  1,\n",
+        "  2"
+      ]
+    },
+    {
+      "name": "scatter_consumption",
+      "displayName": "Scatter Coverage vs Stock",
+      "queryLines": [
+        "SELECT\n",
+        "  cncodpus,\n",
+        "  TRY_CAST(`SALDO DIAS` AS DOUBLE) as saldo_dias,\n",
+        "  TRY_CAST(`SALDO ROLLOS` AS DOUBLE) as saldo_rollos,\n",
+        "  DEPARTAMENTO,\n",
+        "  CASE\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 7 THEN 'CRITICO'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 30 THEN 'ALTO'\n",
+        "    ELSE 'BAJO'\n",
+        "  END as nivel_riesgo\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "  AND TRY_CAST(`SALDO ROLLOS` AS DOUBLE) IS NOT NULL\n",
+        "  AND TRY_CAST(`SALDO DIAS` AS DOUBLE) IS NOT NULL\n",
+        "LIMIT 5000"
+      ]
+    },
+    {
+      "name": "dispatch_matrix",
+      "displayName": "Dispatch Matrix",
+      "queryLines": [
+        "SELECT\n",
+        "  cncodpus,\n",
+        "  `SEDE ROLLOS` as sede_rollos,\n",
+        "  DEPARTAMENTO,\n",
+        "  MUNICIPIO,\n",
+        "  `TIPOLOGIA OPERACIONES` as tipologia_operaciones,\n",
+        "  TRY_CAST(`SALDO ROLLOS` AS DOUBLE) as saldo_rollos,\n",
+        "  TRY_CAST(`SALDO DIAS` AS DOUBLE) as saldo_dias,\n",
+        "  CASE\n",
+        "    WHEN TRY_CAST(`SALDO ROLLOS` AS DOUBLE) <= 0 THEN 'DESABASTECIDO'\n",
+        "    WHEN TRY_CAST(`SALDO ROLLOS` AS DOUBLE) < 30 THEN 'CRITICO'\n",
+        "    ELSE 'ABASTECIDO'\n",
+        "  END as estado_inventario,\n",
+        "  CASE\n",
+        "    WHEN TRY_CAST(`SALDO ROLLOS` AS DOUBLE) <= 0 THEN 'DESPACHO INMEDIATO'\n",
+        "    WHEN TRY_CAST(`SALDO ROLLOS` AS DOUBLE) < 30 THEN 'PEDIDO PREVENTIVO'\n",
+        "    ELSE 'MONITOREO'\n",
+        "  END as sugerencia_accion,\n",
+        "  TRY_CAST(`PPTO TRANSP` AS DOUBLE) as ppto_transp\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "ORDER BY\n",
+        "  saldo_rollos ASC"
+      ]
+    },
+    {
+      "name": "dispatch_urgency_by_dept",
+      "displayName": "Dispatch Urgency by Department",
+      "queryLines": [
+        "SELECT\n",
+        "  DEPARTAMENTO,\n",
+        "  COUNT(*) as urgent_sites_count\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "  AND (\n",
+        "    TRY_CAST(`SALDO ROLLOS` AS DOUBLE) <= 0\n",
+        "    OR `SALDO ROLLOS` IS NULL\n",
+        "  )\n",
+        "GROUP BY\n",
+        "  DEPARTAMENTO\n",
+        "ORDER BY\n",
+        "  urgent_sites_count DESC\n",
+        "LIMIT 15"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "ce550cb7",
+      "displayName": "Control Tower - Executive View",
+      "layout": [
+        {
+          "widget": {
+            "name": "markdown_header",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## ⚠️ PREDICTIVE ANALYTICS DASHBOARD - Real-time forecasting and optimization for supply chain management. Data updates daily at 6:00 AM."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_total_sites",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "executive_kpis",
+                  "fields": [
+                    {
+                      "name": "total_sites_monitored",
+                      "expression": "`total_sites_monitored`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Total Sites Monitored"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "total_sites_monitored"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_critical_risk",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "executive_kpis",
+                  "fields": [
+                    {
+                      "name": "sites_critical_risk",
+                      "expression": "`sites_critical_risk`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Sites at Critical Risk",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sites_critical_risk"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 5,
+            "y": 2,
+            "width": 2,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_requiring_action",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "executive_kpis",
+                  "fields": [
+                    {
+                      "name": "sites_requiring_action",
+                      "expression": "`sites_requiring_action`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Sites Requiring Action"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sites_requiring_action"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 7,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_budget",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "executive_kpis",
+                  "fields": [
+                    {
+                      "name": "total_budget_millions_cop",
+                      "expression": "`total_budget_millions_cop`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Total Budget (M COP)"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "total_budget_millions_cop"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 10,
+            "y": 2,
+            "width": 2,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "table_urgent_action",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "urgent_action_queue",
+                  "fields": [
+                    {
+                      "name": "cncodpus",
+                      "expression": "`cncodpus`"
+                    },
+                    {
+                      "name": "DEPARTAMENTO",
+                      "expression": "`DEPARTAMENTO`"
+                    },
+                    {
+                      "name": "MUNICIPIO",
+                      "expression": "`MUNICIPIO`"
+                    },
+                    {
+                      "name": "sede_origen",
+                      "expression": "`sede_origen`"
+                    },
+                    {
+                      "name": "dias_cobertura",
+                      "expression": "`dias_cobertura`"
+                    },
+                    {
+                      "name": "rollos_requeridos",
+                      "expression": "`rollos_requeridos`"
+                    },
+                    {
+                      "name": "costo_transporte",
+                      "expression": "`costo_transporte`"
+                    },
+                    {
+                      "name": "fecha_estimada_desabastecimiento",
+                      "expression": "`fecha_estimada_desabastecimiento`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Urgent Action Queue - Priority Dispatch Planning"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "cncodpus"
+                  },
+                  {
+                    "fieldName": "DEPARTAMENTO"
+                  },
+                  {
+                    "fieldName": "MUNICIPIO"
+                  },
+                  {
+                    "fieldName": "sede_origen"
+                  },
+                  {
+                    "fieldName": "dias_cobertura"
+                  },
+                  {
+                    "fieldName": "rollos_requeridos"
+                  },
+                  {
+                    "fieldName": "costo_transporte"
+                  },
+                  {
+                    "fieldName": "fecha_estimada_desabastecimiento"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 12,
+            "width": 12,
+            "height": 8
+          }
+        },
+        {
+          "widget": {
+            "name": "pie_risk_distribution",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "risk_distribution",
+                  "fields": [
+                    {
+                      "name": "cantidad_sitios",
+                      "expression": "`cantidad_sitios`"
+                    },
+                    {
+                      "name": "nivel_riesgo",
+                      "expression": "`nivel_riesgo`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Risk Distribution"
+              },
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "cantidad_sitios",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "nivel_riesgo",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "counter_immediate_dispatch",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dispatch_matrix",
+                  "fields": [
+                    {
+                      "name": "count(*)",
+                      "expression": "COUNT(`*`)"
+                    }
+                  ],
+                  "filters": [
+                    {
+                      "expression": "`sugerencia_accion` = 'DESPACHO INMEDIATO'"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Immediate Dispatch Required"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "count(*)"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_dispatch_urgency_by_dept",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dispatch_urgency_by_dept",
+                  "fields": [
+                    {
+                      "name": "urgent_sites_count",
+                      "expression": "`urgent_sites_count`"
+                    },
+                    {
+                      "name": "DEPARTAMENTO",
+                      "expression": "`DEPARTAMENTO`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Immediate Dispatch by Department - Top 15",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "urgent_sites_count",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "DEPARTAMENTO",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 6,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "coverage_demand",
+      "displayName": "Coverage & Demand Analysis",
+      "layout": [
+        {
+          "widget": {
+            "name": "md_header",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## 📊 COVERAGE & DEMAND ANALYSIS - Distribution of PUS by coverage range, consumption patterns and predictive risk indicators"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_coverage_typology",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "coverage_by_typology",
+                  "fields": [
+                    {
+                      "name": "tipologia_operaciones",
+                      "expression": "`tipologia_operaciones`"
+                    },
+                    {
+                      "name": "rango_cobertura",
+                      "expression": "`rango_cobertura`"
+                    },
+                    {
+                      "name": "sum(cantidad_pus)",
+                      "expression": "SUM(`cantidad_pus`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "PUS by Coverage Range & Typology"
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "rango_cobertura",
+                  "displayName": "rango_cobertura",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "sum(cantidad_pus)",
+                  "displayName": "cantidad_pus",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "tipologia_operaciones",
+                  "displayName": "tipologia_operaciones",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "line_coverage_dept",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "coverage_trend",
+                  "fields": [
+                    {
+                      "name": "DEPARTAMENTO",
+                      "expression": "`DEPARTAMENTO`"
+                    },
+                    {
+                      "name": "avg(cobertura_promedio_dias)",
+                      "expression": "AVG(`cobertura_promedio_dias`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Avg Coverage Days by Department"
+              },
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "DEPARTAMENTO",
+                  "displayName": "DEPARTAMENTO",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "avg(cobertura_promedio_dias)",
+                  "displayName": "cobertura_promedio_dias",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "DEPARTAMENTO",
+                  "displayName": "DEPARTAMENTO",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "scatter_consumption_stock",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "scatter_consumption",
+                  "fields": [
+                    {
+                      "name": "nivel_riesgo",
+                      "expression": "`nivel_riesgo`"
+                    },
+                    {
+                      "name": "saldo_dias",
+                      "expression": "`saldo_dias`"
+                    },
+                    {
+                      "name": "saldo_rollos",
+                      "expression": "`saldo_rollos`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Coverage vs Stock Risk Scatter"
+              },
+              "version": 3,
+              "widgetType": "scatter",
+              "encodings": {
+                "x": {
+                  "fieldName": "saldo_dias",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "saldo_rollos",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "nivel_riesgo",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "shape": {
+                  "fieldName": "nivel_riesgo",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 12,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "dispatch_matrix",
+      "displayName": "Dispatch Matrix & Suggestions",
+      "layout": [
+        {
+          "widget": {
+            "name": "md_header",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## 🚚 DISPATCH MATRIX & SUGGESTIONS - Prioritized dispatch queue with inventory status and automated action recommendations"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_departamento",
+            "queries": [
+              {
+                "name": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_DEPARTAMENTO",
+                "query": {
+                  "datasetName": "dispatch_matrix",
+                  "fields": [
+                    {
+                      "name": "DEPARTAMENTO",
+                      "expression": "`DEPARTAMENTO`"
+                    },
+                    {
+                      "name": "DEPARTAMENTO_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Filter by Department"
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "DEPARTAMENTO",
+                    "queryName": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_DEPARTAMENTO"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_sede",
+            "queries": [
+              {
+                "name": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_sede_rollos",
+                "query": {
+                  "datasetName": "dispatch_matrix",
+                  "fields": [
+                    {
+                      "name": "sede_rollos",
+                      "expression": "`sede_rollos`"
+                    },
+                    {
+                      "name": "sede_rollos_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Filter by Sede Rollos"
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "sede_rollos",
+                    "queryName": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_sede_rollos"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_estado",
+            "queries": [
+              {
+                "name": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_estado_inventario",
+                "query": {
+                  "datasetName": "dispatch_matrix",
+                  "fields": [
+                    {
+                      "name": "estado_inventario",
+                      "expression": "`estado_inventario`"
+                    },
+                    {
+                      "name": "estado_inventario_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Filter by Estado Inventario"
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "estado_inventario",
+                    "queryName": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_estado_inventario"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "filter_sugerencia",
+            "queries": [
+              {
+                "name": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_sugerencia_accion",
+                "query": {
+                  "datasetName": "dispatch_matrix",
+                  "fields": [
+                    {
+                      "name": "sugerencia_accion",
+                      "expression": "`sugerencia_accion`"
+                    },
+                    {
+                      "name": "sugerencia_accion_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Filter by Sugerencia"
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "sugerencia_accion",
+                    "queryName": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_sugerencia_accion"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "table_dispatch",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "dispatch_matrix",
+                  "fields": [
+                    {
+                      "name": "cncodpus",
+                      "expression": "`cncodpus`"
+                    },
+                    {
+                      "name": "sede_rollos",
+                      "expression": "`sede_rollos`"
+                    },
+                    {
+                      "name": "DEPARTAMENTO",
+                      "expression": "`DEPARTAMENTO`"
+                    },
+                    {
+                      "name": "MUNICIPIO",
+                      "expression": "`MUNICIPIO`"
+                    },
+                    {
+                      "name": "saldo_rollos",
+                      "expression": "`saldo_rollos`"
+                    },
+                    {
+                      "name": "saldo_dias",
+                      "expression": "`saldo_dias`"
+                    },
+                    {
+                      "name": "estado_inventario",
+                      "expression": "`estado_inventario`"
+                    },
+                    {
+                      "name": "sugerencia_accion",
+                      "expression": "`sugerencia_accion`"
+                    },
+                    {
+                      "name": "ppto_transp",
+                      "expression": "`ppto_transp`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Dispatch Management Queue"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "cncodpus"
+                  },
+                  {
+                    "fieldName": "sede_rollos"
+                  },
+                  {
+                    "fieldName": "DEPARTAMENTO"
+                  },
+                  {
+                    "fieldName": "MUNICIPIO"
+                  },
+                  {
+                    "fieldName": "saldo_rollos"
+                  },
+                  {
+                    "fieldName": "saldo_dias"
+                  },
+                  {
+                    "fieldName": "estado_inventario"
+                  },
+                  {
+                    "fieldName": "sugerencia_accion"
+                  },
+                  {
+                    "fieldName": "ppto_transp"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 6,
+            "width": 12,
+            "height": 8
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    },
+    {
+      "name": "global_filters",
+      "displayName": "Global Filters",
+      "layout": [
+        {
+          "widget": {
+            "name": "gf_departamento",
+            "queries": [
+              {
+                "name": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_DEPARTAMENTO",
+                "query": {
+                  "datasetName": "dispatch_matrix",
+                  "fields": [
+                    {
+                      "name": "DEPARTAMENTO",
+                      "expression": "`DEPARTAMENTO`"
+                    },
+                    {
+                      "name": "DEPARTAMENTO_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Global: Department"
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "DEPARTAMENTO",
+                    "queryName": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_DEPARTAMENTO"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "gf_tipologia",
+            "queries": [
+              {
+                "name": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_tipologia_operaciones",
+                "query": {
+                  "datasetName": "dispatch_matrix",
+                  "fields": [
+                    {
+                      "name": "tipologia_operaciones",
+                      "expression": "`tipologia_operaciones`"
+                    },
+                    {
+                      "name": "tipologia_operaciones_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Global: Operations Typology"
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "tipologia_operaciones",
+                    "queryName": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_tipologia_operaciones"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "gf_estado_inventario",
+            "queries": [
+              {
+                "name": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_estado_inventario",
+                "query": {
+                  "datasetName": "dispatch_matrix",
+                  "fields": [
+                    {
+                      "name": "estado_inventario",
+                      "expression": "`estado_inventario`"
+                    },
+                    {
+                      "name": "estado_inventario_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Global: Inventory Status"
+              },
+              "widgetType": "filter-multi-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "estado_inventario",
+                    "queryName": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_estado_inventario"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "gf_sugerencia",
+            "queries": [
+              {
+                "name": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_sugerencia_accion",
+                "query": {
+                  "datasetName": "dispatch_matrix",
+                  "fields": [
+                    {
+                      "name": "sugerencia_accion",
+                      "expression": "`sugerencia_accion`"
+                    },
+                    {
+                      "name": "sugerencia_accion_associativity",
+                      "expression": "COUNT_IF(`associative_filter_predicate_group`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "frame": {
+                "showTitle": true,
+                "title": "Global: Action Suggestion"
+              },
+              "widgetType": "filter-single-select",
+              "encodings": {
+                "fields": [
+                  {
+                    "fieldName": "sugerencia_accion",
+                    "queryName": "dashboards/01f1afc05e8615b3b517c460f7b3d655/datasets/01f1b0bf29de1624b1234b05471cb426_sugerencia_accion"
+                  }
+                ]
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 2,
+            "width": 3,
+            "height": 4
+          }
+        },
+        {
+          "widget": {
+            "name": "gf_header",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## 🌐 GLOBAL FILTERS - Apply across all dashboard pages. Select values to filter the Control Tower, Coverage Analysis, and Dispatch Matrix simultaneously."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 12,
+            "height": 2
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_GLOBAL_FILTERS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "visualizationColors": [
+        "#1B73E8",
+        "#00A3A1",
+        "#FF8C00",
+        "#E53935",
+        "#7B3FE4",
+        "#2E7D32"
+      ],
+      "widgetHeaderAlignment": "LEFT",
+      "fontFamily": "Inter",
+      "textBoxVerticalAlign": "VERTICAL_ALIGN_CENTER",
+      "widgetPadding": 12,
+      "widgetMargin": 8,
+      "widgetCornerRadius": 8,
+      "widgetShadow": 10,
+      "visualizationColorMappings": [
+        {
+          "value": "CRITICO",
+          "color": "#E53935"
+        },
+        {
+          "value": "ALTO",
+          "color": "#FF8C00"
+        },
+        {
+          "value": "BAJO",
+          "color": "#2E7D32"
+        },
+        {
+          "value": "DESABASTECIDO",
+          "color": "#B71C1C"
+        },
+        {
+          "value": "ABASTECIDO",
+          "color": "#2E7D32"
+        },
+        {
+          "value": "DESPACHO INMEDIATO",
+          "color": "#B71C1C"
+        },
+        {
+          "value": "PEDIDO PREVENTIVO",
+          "color": "#FF8C00"
+        },
+        {
+          "value": "MONITOREO",
+          "color": "#1B73E8"
+        },
+        {
+          "value": "PRINCIPAL",
+          "color": "#1B73E8"
+        },
+        {
+          "value": "INTERMEDIA",
+          "color": "#00A3A1"
+        },
+        {
+          "value": "LEJANA",
+          "color": "#FF8C00"
+        },
+        {
+          "value": "1-5 D",
+          "color": "#E53935"
+        },
+        {
+          "value": "6-10 D",
+          "color": "#FF8C00"
+        },
+        {
+          "value": "11-15 D",
+          "color": "#FFD600"
+        },
+        {
+          "value": "16-30 D",
+          "color": "#00A3A1"
+        },
+        {
+          "value": "31-60 D",
+          "color": "#1B73E8"
+        },
+        {
+          "value": "60+ D",
+          "color": "#2E7D32"
+        }
+      ]
+    },
+    "applyModeEnabled": false
+  }
+}

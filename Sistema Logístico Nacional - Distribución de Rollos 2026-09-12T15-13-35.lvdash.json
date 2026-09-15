@@ -1,0 +1,1157 @@
+{
+  "datasets": [
+    {
+      "name": "cobertura_promedio",
+      "displayName": "Cobertura Promedio Nacional",
+      "queryLines": [
+        "SELECT\n",
+        "  ROUND(AVG(TRY_CAST(`SALDO DIAS` AS DOUBLE)), 1) as cobertura_promedio_dias\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'"
+      ]
+    },
+    {
+      "name": "kpis_financieros",
+      "displayName": "KPIs Financieros Globales",
+      "queryLines": [
+        "SELECT\n",
+        "  COUNT(DISTINCT cncodpus) as pus_activos,\n",
+        "  SUM(\n",
+        "    CASE\n",
+        "      WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 0 THEN 1\n",
+        "      ELSE 0\n",
+        "    END\n",
+        "  ) as pus_desabastecidos,\n",
+        "  SUM(\n",
+        "    CASE\n",
+        "      WHEN `ACCIÓN` = 'REABASTECER' THEN 1\n",
+        "      ELSE 0\n",
+        "    END\n",
+        "  ) as pus_reabastecer,\n",
+        "  ROUND(SUM(TRY_CAST(`PPTO TRANSP` AS DOUBLE)) / 1000000, 2) as presupuesto_total_asignado\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'"
+      ]
+    },
+    {
+      "name": "top_departamentos",
+      "displayName": "Top 15 Departamentos Críticos",
+      "queryLines": [
+        "SELECT\n",
+        "  DEPARTAMENTO,\n",
+        "  SUM(TRY_CAST(`SALDO ROLLOS` AS DOUBLE)) as saldo_total,\n",
+        "  COUNT(cncodpus) as total_pus,\n",
+        "  SUM(\n",
+        "    CASE\n",
+        "      WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 7 THEN 1\n",
+        "      ELSE 0\n",
+        "    END\n",
+        "  ) as pus_criticos\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "GROUP BY\n",
+        "  DEPARTAMENTO\n",
+        "ORDER BY\n",
+        "  pus_criticos DESC\n",
+        "LIMIT 15"
+      ]
+    },
+    {
+      "name": "scatter_consumo_cobertura",
+      "displayName": "Relación Consumo vs Cobertura",
+      "queryLines": [
+        "SELECT\n",
+        "  cncodpus,\n",
+        "  prom_mensual as consumo_mensual,\n",
+        "  TRY_CAST(`SALDO DIAS` AS DOUBLE) as cobertura_dias,\n",
+        "  CASE\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 7 THEN 'CRÍTICO'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 15 THEN 'ALTO'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 30 THEN 'MEDIO'\n",
+        "    ELSE 'BAJO'\n",
+        "  END as riesgo_desabastecimiento\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "  AND prom_mensual IS NOT NULL"
+      ]
+    },
+    {
+      "name": "alertas_reabastecimiento",
+      "displayName": "Top 30 Alertas Reabastecimiento",
+      "queryLines": [
+        "SELECT\n",
+        "  ROW_NUMBER() OVER (ORDER BY TRY_CAST(`SALDO DIAS` AS DOUBLE) ASC) as ranking_prioridad,\n",
+        "  cncodpus,\n",
+        "  DEPARTAMENTO,\n",
+        "  MUNICIPIO,\n",
+        "  `SEDE ROLLOS` as sede,\n",
+        "  TRY_CAST(`SALDO DIAS` AS DOUBLE) as cobertura_dias,\n",
+        "  ABS(TRY_CAST(`SALDO ROLLOS` AS DOUBLE)) as rollos_requeridos,\n",
+        "  ROUND(TRY_CAST(`PPTO TRANSP` AS DOUBLE), 2) as costo_cop,\n",
+        "  DATE_ADD(\n",
+        "    CURRENT_DATE(),\n",
+        "    CAST(TRY_CAST(`SALDO DIAS` AS DOUBLE) AS INT)\n",
+        "  ) as fecha_estimada_desabastecimiento\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "  AND `ACCIÓN` = 'REABASTECER'\n",
+        "  AND TRY_CAST(`SALDO DIAS` AS DOUBLE) < 30\n",
+        "ORDER BY\n",
+        "  cobertura_dias ASC\n",
+        "LIMIT 30"
+      ]
+    },
+    {
+      "name": "resumen_inventario_sede",
+      "displayName": "Resumen Inventario por Sede",
+      "queryLines": [
+        "SELECT\n",
+        "  `SEDE ROLLOS` as sede,\n",
+        "  COUNT(cncodpus) as total_pus,\n",
+        "  SUM(TRY_CAST(`SALDO ROLLOS` AS DOUBLE)) as stock_total_rollos,\n",
+        "  ROUND(AVG(TRY_CAST(`SALDO DIAS` AS DOUBLE)), 1) as cobertura_promedio_dias,\n",
+        "  SUM(\n",
+        "    CASE\n",
+        "      WHEN `ACCIÓN` = 'REABASTECER' THEN 1\n",
+        "      ELSE 0\n",
+        "    END\n",
+        "  ) as pus_requieren_reabastecimiento,\n",
+        "  ROUND(SUM(TRY_CAST(`PPTO TRANSP` AS DOUBLE)) / 1000000, 2) as presupuesto_asignado_millones\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "GROUP BY\n",
+        "  `SEDE ROLLOS`\n",
+        "ORDER BY\n",
+        "  pus_requieren_reabastecimiento DESC"
+      ]
+    },
+    {
+      "name": "pct_desabastecidos",
+      "displayName": "Porcentaje Desabastecidos",
+      "queryLines": [
+        "WITH kpis AS (\n",
+        "  SELECT\n",
+        "    COUNT(DISTINCT cncodpus) as pus_activos,\n",
+        "    SUM(\n",
+        "      CASE\n",
+        "        WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 0 THEN 1\n",
+        "        ELSE 0\n",
+        "      END\n",
+        "    ) as pus_desabastecidos\n",
+        "  FROM\n",
+        "    proyecto1.default.modelo_bigdata_raw\n",
+        "  WHERE\n",
+        "    `ESTADO PUNTO` = 'ACTIVO'\n",
+        ")\n",
+        "SELECT\n",
+        "  ROUND((pus_desabastecidos * 100.0 / pus_activos), 2) as pct_desabastecidos\n",
+        "FROM\n",
+        "  kpis"
+      ]
+    },
+    {
+      "name": "distribucion_riesgo",
+      "displayName": "Distribución de Niveles de Riesgo",
+      "queryLines": [
+        "SELECT\n",
+        "  CASE\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 7 THEN 'CRÍTICO'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 15 THEN 'ALTO'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 30 THEN 'MEDIO'\n",
+        "    ELSE 'BAJO'\n",
+        "  END as nivel_riesgo,\n",
+        "  COUNT(cncodpus) as cantidad\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "GROUP BY\n",
+        "  1\n",
+        "ORDER BY\n",
+        "  CASE\n",
+        "    WHEN nivel_riesgo = 'CRÍTICO' THEN 1\n",
+        "    WHEN nivel_riesgo = 'ALTO' THEN 2\n",
+        "    WHEN nivel_riesgo = 'MEDIO' THEN 3\n",
+        "    ELSE 4\n",
+        "  END"
+      ]
+    },
+    {
+      "name": "top_municipios",
+      "displayName": "Top 10 Municipios Críticos",
+      "queryLines": [
+        "SELECT\n",
+        "  DEPARTAMENTO,\n",
+        "  MUNICIPIO,\n",
+        "  COUNT(cncodpus) as pus_criticos,\n",
+        "  ROUND(AVG(TRY_CAST(`SALDO DIAS` AS DOUBLE)), 1) as promedio_cobertura,\n",
+        "  SUM(TRY_CAST(`SALDO ROLLOS` AS DOUBLE)) as stock_total\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "  AND TRY_CAST(`SALDO DIAS` AS DOUBLE) < 15\n",
+        "GROUP BY\n",
+        "  DEPARTAMENTO,\n",
+        "  MUNICIPIO\n",
+        "ORDER BY\n",
+        "  pus_criticos DESC\n",
+        "LIMIT 10"
+      ]
+    },
+    {
+      "name": "acciones_por_sede",
+      "displayName": "Acciones por Sede de Distribución",
+      "queryLines": [
+        "SELECT\n",
+        "  `SEDE ROLLOS` as sede,\n",
+        "  `ACCIÓN` as accion,\n",
+        "  COUNT(cncodpus) as cantidad_pus\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "GROUP BY\n",
+        "  `SEDE ROLLOS`,\n",
+        "  `ACCIÓN`\n",
+        "ORDER BY\n",
+        "  `SEDE ROLLOS`"
+      ]
+    },
+    {
+      "name": "resumen_alertas",
+      "displayName": "Resumen de Alertas por Nivel",
+      "queryLines": [
+        "SELECT\n",
+        "  CASE\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) < 7 THEN 'ROJA - Crítico'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) BETWEEN 7 AND 15 THEN 'NARANJA - Urgente'\n",
+        "    WHEN TRY_CAST(`SALDO DIAS` AS DOUBLE) BETWEEN 15 AND 30 THEN 'AMARILLA - Atención'\n",
+        "    ELSE 'VERDE - Normal'\n",
+        "  END AS nivel_alerta,\n",
+        "  COUNT(*) AS total_pus,\n",
+        "  SUM(\n",
+        "    CASE\n",
+        "      WHEN `ACCIÓN` = 'REABASTECER' THEN 1\n",
+        "      ELSE 0\n",
+        "    END\n",
+        "  ) AS pus_reabastecer,\n",
+        "  ROUND(AVG(TRY_CAST(`SALDO DIAS` AS DOUBLE)), 1) AS cobertura_promedio\n",
+        "FROM\n",
+        "  proyecto1.default.modelo_bigdata_raw\n",
+        "WHERE\n",
+        "  `ESTADO PUNTO` = 'ACTIVO'\n",
+        "GROUP BY\n",
+        "  1\n",
+        "ORDER BY\n",
+        "  CASE\n",
+        "    WHEN nivel_alerta LIKE 'ROJA%' THEN 1\n",
+        "    WHEN nivel_alerta LIKE 'NARANJA%' THEN 2\n",
+        "    WHEN nivel_alerta LIKE 'AMARILLA%' THEN 3\n",
+        "    ELSE 4\n",
+        "  END"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "559eeda1",
+      "displayName": "Page 1",
+      "layout": [
+        {
+          "widget": {
+            "name": "kpi_pus_activos",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "kpis_financieros",
+                  "fields": [
+                    {
+                      "name": "pus_activos",
+                      "expression": "`pus_activos`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "PUS Activos",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "pus_activos",
+                  "rowNumber": 0,
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "hideGroupSeparator": false
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_pct_desabastecidos",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "pct_desabastecidos",
+                  "fields": [
+                    {
+                      "name": "pct_desabastecidos",
+                      "expression": "`pct_desabastecidos`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "% Desabastecidos",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "pct_desabastecidos",
+                  "rowNumber": 0,
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    }
+                  },
+                  "formatTemplate": "{{@formatted}}%"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 0,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_cobertura_dias",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "cobertura_promedio",
+                  "fields": [
+                    {
+                      "name": "cobertura_promedio_dias",
+                      "expression": "`cobertura_promedio_dias`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Cobertura Promedio (Días)",
+                  "fields": []
+                }
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "cobertura_promedio_dias",
+                  "rowNumber": 0,
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 1
+                    }
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 0,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_presupuesto",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "kpis_financieros",
+                  "fields": [
+                    {
+                      "name": "presupuesto_total_asignado",
+                      "expression": "`presupuesto_total_asignado`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Presupuesto Transporte (M COP)"
+              },
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "presupuesto_total_asignado",
+                  "rowNumber": 0,
+                  "format": {
+                    "type": "number-plain",
+                    "abbreviation": "none",
+                    "decimalPlaces": {
+                      "type": "exact",
+                      "places": 2
+                    }
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 9,
+            "y": 0,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "top_departamentos_bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "top_departamentos",
+                  "fields": [
+                    {
+                      "name": "pus_criticos",
+                      "expression": "`pus_criticos`"
+                    },
+                    {
+                      "name": "DEPARTAMENTO",
+                      "expression": "`DEPARTAMENTO`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Top 15 Departamentos Críticos",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "pus_criticos",
+                  "displayName": "PUS Críticos",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "DEPARTAMENTO",
+                  "displayName": "Departamento",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "color": {
+                  "fieldName": "pus_criticos",
+                  "displayName": "pus_criticos",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "top_municipios_table",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "top_municipios",
+                  "fields": [
+                    {
+                      "name": "DEPARTAMENTO",
+                      "expression": "`DEPARTAMENTO`"
+                    },
+                    {
+                      "name": "MUNICIPIO",
+                      "expression": "`MUNICIPIO`"
+                    },
+                    {
+                      "name": "pus_criticos",
+                      "expression": "`pus_criticos`"
+                    },
+                    {
+                      "name": "promedio_cobertura",
+                      "expression": "`promedio_cobertura`"
+                    },
+                    {
+                      "name": "stock_total",
+                      "expression": "`stock_total`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Top 10 Municipios Críticos"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "DEPARTAMENTO"
+                  },
+                  {
+                    "fieldName": "MUNICIPIO"
+                  },
+                  {
+                    "fieldName": "pus_criticos"
+                  },
+                  {
+                    "fieldName": "promedio_cobertura"
+                  },
+                  {
+                    "fieldName": "stock_total"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 7,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "acciones_sede_bar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "acciones_por_sede",
+                  "fields": [
+                    {
+                      "name": "accion",
+                      "expression": "`accion`"
+                    },
+                    {
+                      "name": "sede",
+                      "expression": "`sede`"
+                    },
+                    {
+                      "name": "cantidad_pus",
+                      "expression": "`cantidad_pus`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": {
+                  "value": "Distribución de Acciones por Sede",
+                  "fields": []
+                }
+              },
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "sede",
+                  "displayName": "Sede",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                },
+                "y": {
+                  "fieldName": "cantidad_pus",
+                  "displayName": "Cantidad PUS",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "accion",
+                  "displayName": "Acción",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 18,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "pivot_inventario_sede",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "acciones_por_sede",
+                  "fields": [
+                    {
+                      "name": "sede",
+                      "expression": "`sede`"
+                    },
+                    {
+                      "name": "accion",
+                      "expression": "`accion`"
+                    },
+                    {
+                      "name": "cantidad_pus",
+                      "expression": "`cantidad_pus`"
+                    }
+                  ],
+                  "cubeGroupingSets": {
+                    "sets": [
+                      {
+                        "fieldNames": [
+                          "sede"
+                        ]
+                      },
+                      {
+                        "fieldNames": [
+                          "accion"
+                        ]
+                      }
+                    ]
+                  },
+                  "disaggregated": true,
+                  "orders": [
+                    {
+                      "direction": "ASC",
+                      "expression": "`sede`"
+                    },
+                    {
+                      "direction": "ASC",
+                      "expression": "`accion`"
+                    }
+                  ]
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Inventario por Sede y Acción"
+              },
+              "version": 3,
+              "widgetType": "pivot",
+              "encodings": {
+                "rows": [
+                  {
+                    "fieldName": "sede",
+                    "scale": {
+                      "type": "categorical"
+                    }
+                  }
+                ],
+                "columns": [
+                  {
+                    "fieldName": "accion",
+                    "scale": {
+                      "type": "categorical"
+                    }
+                  }
+                ],
+                "cell": {
+                  "type": "single-cell",
+                  "fieldName": "cantidad_pus"
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 17,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "scatter_consumo_cobertura",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "scatter_consumo_cobertura",
+                  "fields": [
+                    {
+                      "name": "riesgo_desabastecimiento",
+                      "expression": "`riesgo_desabastecimiento`"
+                    },
+                    {
+                      "name": "consumo_mensual",
+                      "expression": "`consumo_mensual`"
+                    },
+                    {
+                      "name": "cobertura_dias",
+                      "expression": "`cobertura_dias`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Consumo vs Cobertura"
+              },
+              "version": 3,
+              "widgetType": "scatter",
+              "encodings": {
+                "x": {
+                  "fieldName": "consumo_mensual",
+                  "displayName": "Consumo Mensual",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "y": {
+                  "fieldName": "cobertura_dias",
+                  "displayName": "Cobertura (Días)",
+                  "scale": {
+                    "type": "quantitative"
+                  }
+                },
+                "color": {
+                  "fieldName": "riesgo_desabastecimiento",
+                  "displayName": "Nivel de Riesgo",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 27,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "alertas_urgentes",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "alertas_reabastecimiento",
+                  "fields": [
+                    {
+                      "name": "ranking_prioridad",
+                      "expression": "`ranking_prioridad`"
+                    },
+                    {
+                      "name": "cncodpus",
+                      "expression": "`cncodpus`"
+                    },
+                    {
+                      "name": "DEPARTAMENTO",
+                      "expression": "`DEPARTAMENTO`"
+                    },
+                    {
+                      "name": "MUNICIPIO",
+                      "expression": "`MUNICIPIO`"
+                    },
+                    {
+                      "name": "sede",
+                      "expression": "`sede`"
+                    },
+                    {
+                      "name": "cobertura_dias",
+                      "expression": "`cobertura_dias`"
+                    },
+                    {
+                      "name": "rollos_requeridos",
+                      "expression": "`rollos_requeridos`"
+                    },
+                    {
+                      "name": "costo_cop",
+                      "expression": "`costo_cop`"
+                    },
+                    {
+                      "name": "fecha_estimada_desabastecimiento",
+                      "expression": "`fecha_estimada_desabastecimiento`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "🚨 Alertas Urgentes de Reabastecimiento"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "ranking_prioridad",
+                    "displayName": "#"
+                  },
+                  {
+                    "fieldName": "cncodpus",
+                    "displayName": "PUS"
+                  },
+                  {
+                    "fieldName": "DEPARTAMENTO",
+                    "displayName": "Departamento"
+                  },
+                  {
+                    "fieldName": "MUNICIPIO",
+                    "displayName": "Municipio"
+                  },
+                  {
+                    "fieldName": "sede",
+                    "displayName": "Sede"
+                  },
+                  {
+                    "fieldName": "cobertura_dias",
+                    "displayName": "Días Cobertura"
+                  },
+                  {
+                    "fieldName": "rollos_requeridos",
+                    "displayName": "Rollos Req."
+                  },
+                  {
+                    "fieldName": "costo_cop",
+                    "displayName": "Costo (COP)"
+                  },
+                  {
+                    "fieldName": "fecha_estimada_desabastecimiento",
+                    "displayName": "Fecha Crítica"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 40,
+            "width": 12,
+            "height": 15
+          }
+        },
+        {
+          "widget": {
+            "name": "donut_riesgo",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "distribucion_riesgo",
+                  "fields": [
+                    {
+                      "name": "cantidad",
+                      "expression": "`cantidad`"
+                    },
+                    {
+                      "name": "nivel_riesgo",
+                      "expression": "`nivel_riesgo`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Distribución de Riesgo"
+              },
+              "version": 3,
+              "widgetType": "pie",
+              "encodings": {
+                "angle": {
+                  "fieldName": "cantidad",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Cantidad"
+                },
+                "color": {
+                  "fieldName": "nivel_riesgo",
+                  "displayName": "Nivel de Riesgo",
+                  "scale": {
+                    "type": "categorical"
+                  }
+                }
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 28,
+            "width": 6,
+            "height": 10
+          }
+        },
+        {
+          "widget": {
+            "name": "header_alertas",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## 🚨 Sistema de Alertas Automáticas\n",
+                "\n",
+                "**Umbrales Críticos Monitoreados:**\n",
+                "\n",
+                "* **Alerta Roja**: PUS con cobertura < 7 días (Desabastecimiento inminente)\n",
+                "* **Alerta Naranja**: PUS con cobertura entre 7-15 días (Requiere acción urgente)\n",
+                "* **Alerta Amarilla**: PUS con cobertura entre 15-30 días (Planificar reabastecimiento)\n",
+                "\n",
+                "**Acciones Recomendadas:**\n",
+                "\n",
+                "1. Revisar la tabla de alertas urgentes (abajo) ordenada por prioridad\n",
+                "2. Verificar disponibilidad de inventario en sedes cercanas\n",
+                "3. Calcular costos de transporte y aprobar presupuesto\n",
+                "4. Coordinar logística de distribución con las sedes identificadas\n",
+                "\n",
+                "*Última actualización: Automática en cada refresco del dashboard*"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 55,
+            "width": 12,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "config_publicacion",
+            "multilineTextboxSpec": {
+              "lines": [
+                "### 📧 Alertas Automáticas por Email\n",
+                "\n",
+                "**Para activar notificaciones automáticas:**\n",
+                "\n",
+                "1. **Publicar el dashboard**: Botón \"Publish\" (esquina superior derecha)\n",
+                "2. **Crear programación**: Ir a Settings → Schedules → Add Schedule\n",
+                "3. **Configurar envío diario**:\n",
+                "   * Frecuencia: Lunes a Viernes, 7:00 AM (Hora Colombia)\n",
+                "   * Adjuntar: Tabla de alertas urgentes en formato Excel\n",
+                "   * Destinatarios: Agregar emails del equipo logístico\n",
+                "\n",
+                "**Beneficios:**\n",
+                "\n",
+                "* Reporte automático cada mañana con PUS críticos\n",
+                "* Archivo Excel adjunto para planificación offline\n",
+                "* Notificaciones inmediatas de cambios en niveles de riesgo"
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 58,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "resumen_alertas",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "resumen_alertas",
+                  "fields": [
+                    {
+                      "name": "nivel_alerta",
+                      "expression": "`nivel_alerta`"
+                    },
+                    {
+                      "name": "total_pus",
+                      "expression": "`total_pus`"
+                    },
+                    {
+                      "name": "pus_reabastecer",
+                      "expression": "`pus_reabastecer`"
+                    },
+                    {
+                      "name": "cobertura_promedio",
+                      "expression": "`cobertura_promedio`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "frame": {
+                "showTitle": true,
+                "title": "Resumen de Alertas"
+              },
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "nivel_alerta"
+                  },
+                  {
+                    "fieldName": "total_pus"
+                  },
+                  {
+                    "fieldName": "pus_reabastecer"
+                  },
+                  {
+                    "fieldName": "cobertura_promedio"
+                  }
+                ]
+              },
+              "data": {
+                "queryName": "main_query"
+              }
+            }
+          },
+          "position": {
+            "x": 6,
+            "y": 58,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layoutVersion": "GRID_V1"
+    }
+  ],
+  "uiSettings": {
+    "theme": {
+      "widgetHeaderAlignment": "ALIGNMENT_UNSPECIFIED"
+    },
+    "applyModeEnabled": false
+  }
+}
