@@ -1,2 +1,134 @@
 {
+  "workflow_name": "Gold_Layer_ML_Predictions",
+  "description": "KNIME workflow for Gold layer - RandomForest ML forecasting and optimization",
+  "version": "1.0",
+  "nodes": [
+    {
+      "node_id": "1",
+      "node_type": "Database Reader",
+      "node_name": "Read Silver Table",
+      "settings": {
+        "connection": "databricks_unity_catalog",
+        "table": "catalog_logistica.db_rollos.silver_inventario_consolidado"
+      }
+    },
+    {
+      "node_id": "2",
+      "node_type": "Column Filter",
+      "node_name": "Select ML Features",
+      "settings": {
+        "include_columns": ["NUM_CUENTA", "PROM_TRANSACCIONES", "SALDO", "ROLLOS_REQUERIDOS", "ESTADO_INVENTARIO"]
+      }
+    },
+    {
+      "node_id": "3",
+      "node_type": "Partitioning",
+      "node_name": "Train/Test Split",
+      "settings": {
+        "train_ratio": 0.8,
+        "stratify_by": "ESTADO_INVENTARIO",
+        "random_seed": 42
+      }
+    },
+    {
+      "node_id": "4",
+      "node_type": "Random Forest Learner",
+      "node_name": "Train RandomForest Model",
+      "settings": {
+        "target_column": "PROM_TRANSACCIONES",
+        "feature_columns": ["SALDO", "ROLLOS_REQUERIDOS"],
+        "n_estimators": 100,
+        "max_depth": 10,
+        "min_samples_split": 5,
+        "random_state": 42
+      }
+    },
+    {
+      "node_id": "5",
+      "node_type": "Random Forest Predictor",
+      "node_name": "Generate 30-day Forecast",
+      "settings": {
+        "prediction_column": "DEMANDA_PREDICHA_30D",
+        "include_prediction_confidence": true
+      }
+    },
+    {
+      "node_id": "6",
+      "node_type": "Math Formula",
+      "node_name": "Calculate SALDO_DIAS",
+      "settings": {
+        "formula": "($SALDO$ / ($PROM_TRANSACCIONES$ / 30))",
+        "output_column": "SALDO_DIAS"
+      }
+    },
+    {
+      "node_id": "7",
+      "node_type": "Rule Engine",
+      "node_name": "Classify Coverage Range",
+      "settings": {
+        "rules": [
+          "$SALDO_DIAS$ < 30 => 'CRITICO'",
+          "$SALDO_DIAS$ >= 30 AND $SALDO_DIAS$ < 60 => 'NORMAL'",
+          "$SALDO_DIAS$ >= 60 => 'EXCEDENTE'"
+        ],
+        "output_column": "RANGO_COBERTURA_T"
+      }
+    },
+    {
+      "node_id": "8",
+      "node_type": "Math Formula",
+      "node_name": "Calculate Lote Optimo",
+      "settings": {
+        "formula": "CEIL(MAX(0, (60 - $SALDO_DIAS$) * $PROM_TRANSACCIONES$ / 30) / 12) * 12",
+        "output_column": "LOTE_OPTIMO"
+      }
+    },
+    {
+      "node_id": "9",
+      "node_type": "Rule Engine",
+      "node_name": "Generate Final Suggestion",
+      "settings": {
+        "rules": [
+          "$RANGO_COBERTURA_T$ = 'CRITICO' => 'DESPACHO URGENTE: ' + $LOTE_OPTIMO$ + ' rollos'",
+          "$RANGO_COBERTURA_T$ = 'NORMAL' => 'PROGRAMAR: ' + $LOTE_OPTIMO$ + ' rollos'",
+          "$RANGO_COBERTURA_T$ = 'EXCEDENTE' => 'NO DESPACHAR - Stock suficiente'"
+        ],
+        "output_column": "SUGERENCIA_FINAL"
+      }
+    },
+    {
+      "node_id": "10",
+      "node_type": "Scorer",
+      "node_name": "Calculate Model Metrics",
+      "settings": {
+        "metrics": ["MAE", "RMSE", "R2"]
+      }
+    },
+    {
+      "node_id": "11",
+      "node_type": "Python Script",
+      "node_name": "Write to Delta Gold",
+      "settings": {
+        "script": "df.write.format('delta').mode('overwrite').saveAsTable('catalog_logistica.db_rollos.gold_plan_abastecimiento')"
+      }
+    }
+  ],
+  "connections": [
+    {"from": "1", "to": "2"},
+    {"from": "2", "to": "3"},
+    {"from": "3", "to": "4", "port": "train"},
+    {"from": "3", "to": "5", "port": "test"},
+    {"from": "4", "to": "5", "port": "model"},
+    {"from": "5", "to": "6"},
+    {"from": "6", "to": "7"},
+    {"from": "7", "to": "8"},
+    {"from": "8", "to": "9"},
+    {"from": "5", "to": "10"},
+    {"from": "9", "to": "11"}
+  ],
+  "parameters": {
+    "forecast_horizon_days": 30,
+    "target_coverage_days": 60,
+    "stock_security_rollos": 30
+  }
 }

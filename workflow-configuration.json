@@ -1,2 +1,81 @@
 {
+  "workflow_name": "Bronze_Layer_Ingestion",
+  "description": "KNIME workflow for Bronze layer - Excel ingestion and normalization",
+  "version": "1.0",
+  "nodes": [
+    {
+      "node_id": "1",
+      "node_type": "Excel Reader",
+      "node_name": "Read Modelo_bigdata",
+      "settings": {
+        "file_path": "/Volumes/catalog_logistica/db_rollos/landing/Modelo_bigdata.xlsx",
+        "sheet_name": "Hoja1",
+        "has_row_headers": true,
+        "has_col_headers": true
+      },
+      "output_columns": ["NUM_CUENTA", "IDENTIFICACION", "RAZON_SOCIAL", "FORMATO", "PUS", "DEPARTAMENTO", "CIUDAD", "DIRECCION_ENTREGA", "PROM_TRANSACCIONES", "ROLLOS_DISPONIBLES_INVENTARIO", "ROLLOS_TRANSITO"]
+    },
+    {
+      "node_id": "2",
+      "node_type": "Excel Reader",
+      "node_name": "Read Stock_Wompi",
+      "settings": {
+        "file_path": "/Volumes/catalog_logistica/db_rollos/landing/Stock_Wompi_Rollos_2026-09-12.xlsx",
+        "sheet_name": "Hoja1",
+        "has_row_headers": true,
+        "has_col_headers": true
+      },
+      "output_columns": ["NUM_CUENTA", "IDENTIFICACION", "RAZON_SOCIAL", "STOCK_WOMPI_ROLLOS"]
+    },
+    {
+      "node_id": "3",
+      "node_type": "Excel Reader",
+      "node_name": "Read OC_AGOSTO",
+      "settings": {
+        "file_path": "/Volumes/catalog_logistica/db_rollos/landing/OC_AGOSTO.xlsx",
+        "sheet_name": "Hoja1",
+        "has_row_headers": true,
+        "has_col_headers": true
+      },
+      "output_columns": ["NUM_CUENTA", "IDENTIFICACION", "RAZON_SOCIAL", "FECHA_OC", "CANTIDAD_ROLLOS_OC"]
+    },
+    {
+      "node_id": "4",
+      "node_type": "Column Rename",
+      "node_name": "Normalize Column Names",
+      "settings": {
+        "operation": "replace_spaces_with_underscores",
+        "to_uppercase": true
+      }
+    },
+    {
+      "node_id": "5",
+      "node_type": "Missing Value",
+      "node_name": "Handle Nulls",
+      "settings": {
+        "numeric_columns": "fill_with_zero",
+        "string_columns": "keep_as_null"
+      }
+    },
+    {
+      "node_id": "6",
+      "node_type": "Python Script",
+      "node_name": "Write to Delta Bronze",
+      "settings": {
+        "script": "from pyspark.sql import SparkSession\nspark = SparkSession.builder.getOrCreate()\ndf.write.format('delta').mode('overwrite').saveAsTable('catalog_logistica.db_rollos.bronze_modelo_bigdata')"
+      }
+    }
+  ],
+  "connections": [
+    {"from": "1", "to": "4"},
+    {"from": "2", "to": "4"},
+    {"from": "3", "to": "4"},
+    {"from": "4", "to": "5"},
+    {"from": "5", "to": "6"}
+  ],
+  "parameters": {
+    "catalog_name": "catalog_logistica",
+    "schema_name": "db_rollos",
+    "volume_path": "/Volumes/catalog_logistica/db_rollos/landing"
+  }
 }

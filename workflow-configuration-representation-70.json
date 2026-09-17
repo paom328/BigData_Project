@@ -1,2 +1,117 @@
 {
+  "workflow_name": "Data_Quality_Validation",
+  "description": "KNIME workflow for data quality checks and validation across all layers",
+  "version": "1.0",
+  "visual_representation": {
+    "canvas_width": 1200,
+    "canvas_height": 800,
+    "zoom_level": 1.0
+  },
+  "nodes": [
+    {
+      "node_id": "1",
+      "node_type": "Database Reader",
+      "node_name": "Read All Bronze Tables",
+      "visual_position": {"x": 100, "y": 200},
+      "settings": {
+        "tables": [
+          "catalog_logistica.db_rollos.bronze_modelo_bigdata",
+          "catalog_logistica.db_rollos.bronze_stock_wompi",
+          "catalog_logistica.db_rollos.bronze_oc_agosto"
+        ]
+      }
+    },
+    {
+      "node_id": "2",
+      "node_type": "Row Filter",
+      "node_name": "Filter Invalid Records",
+      "visual_position": {"x": 300, "y": 200},
+      "settings": {
+        "conditions": [
+          "NUM_CUENTA IS NOT NULL",
+          "IDENTIFICACION IS NOT NULL",
+          "PROM_TRANSACCIONES >= 0"
+        ]
+      }
+    },
+    {
+      "node_id": "3",
+      "node_type": "Missing Value",
+      "node_name": "Check Missing Values",
+      "visual_position": {"x": 500, "y": 200},
+      "settings": {
+        "strategy": "report_only",
+        "threshold_percent": 10
+      }
+    },
+    {
+      "node_id": "4",
+      "node_type": "Statistics",
+      "node_name": "Calculate Data Statistics",
+      "visual_position": {"x": 500, "y": 350},
+      "settings": {
+        "metrics": ["count", "mean", "min", "max", "std", "null_count", "distinct_count"]
+      }
+    },
+    {
+      "node_id": "5",
+      "node_type": "Rule Engine",
+      "node_name": "Flag Data Quality Issues",
+      "visual_position": {"x": 700, "y": 200},
+      "settings": {
+        "rules": [
+          "$PROM_TRANSACCIONES$ < 0 => 'INVALID_NEGATIVE'",
+          "$SALDO$ < -1000 => 'INVALID_SALDO'",
+          "$ROLLOS_REQUERIDOS$ < 0 => 'INVALID_REQUIREMENT'",
+          "TRUE => 'VALID'"
+        ],
+        "output_column": "QUALITY_FLAG"
+      }
+    },
+    {
+      "node_id": "6",
+      "node_type": "Group By",
+      "node_name": "Aggregate Quality Metrics",
+      "visual_position": {"x": 900, "y": 200},
+      "settings": {
+        "group_by_columns": ["QUALITY_FLAG"],
+        "aggregations": [{"column": "NUM_CUENTA", "function": "count"}]
+      }
+    },
+    {
+      "node_id": "7",
+      "node_type": "Pie Chart",
+      "node_name": "Quality Distribution Chart",
+      "visual_position": {"x": 900, "y": 350},
+      "settings": {
+        "category_column": "QUALITY_FLAG",
+        "value_column": "count"
+      }
+    },
+    {
+      "node_id": "8",
+      "node_type": "Python Script",
+      "node_name": "Export Quality Report",
+      "visual_position": {"x": 1100, "y": 200},
+      "settings": {
+        "script": "import datetime\nreport = {\n  'timestamp': datetime.datetime.now().isoformat(),\n  'total_records': len(df),\n  'quality_summary': df['QUALITY_FLAG'].value_counts().to_dict()\n}\ndf.to_json('/Volumes/catalog_logistica/db_rollos/reports/quality_report.json')"
+      }
+    }
+  ],
+  "connections": [
+    {"from": "1", "to": "2"},
+    {"from": "2", "to": "3"},
+    {"from": "2", "to": "4"},
+    {"from": "3", "to": "5"},
+    {"from": "5", "to": "6"},
+    {"from": "6", "to": "7"},
+    {"from": "6", "to": "8"}
+  ],
+  "annotations": [
+    {
+      "text": "Data Quality Pipeline: Validates all Bronze tables for consistency and completeness",
+      "position": {"x": 100, "y": 50},
+      "style": "header"
+    }
+  ]
 }

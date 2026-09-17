@@ -1,2 +1,176 @@
 {
+  "workflow_name": "Pipeline_Orchestration_Master",
+  "description": "KNIME master workflow orchestrating Bronze → Silver → Gold Medallion pipeline",
+  "version": "1.0",
+  "visual_representation": {
+    "canvas_width": 1600,
+    "canvas_height": 1000,
+    "zoom_level": 0.8
+  },
+  "nodes": [
+    {
+      "node_id": "1",
+      "node_type": "Python Script",
+      "node_name": "Initialize Pipeline",
+      "visual_position": {"x": 100, "y": 400},
+      "settings": {
+        "script": "import logging\nlogging.info('Starting Medallion Pipeline Execution')\npipeline_config = {\n  'catalog': 'catalog_logistica',\n  'schema': 'db_rollos',\n  'execution_time': datetime.now()\n}"
+      }
+    },
+    {
+      "node_id": "2",
+      "node_type": "Call Workflow",
+      "node_name": "Execute Bronze Ingestion",
+      "visual_position": {"x": 300, "y": 200},
+      "settings": {
+        "workflow_path": "workflow-configuration.json",
+        "wait_for_completion": true,
+        "timeout_minutes": 30
+      }
+    },
+    {
+      "node_id": "3",
+      "node_type": "IF Switch",
+      "node_name": "Check Bronze Success",
+      "visual_position": {"x": 500, "y": 200},
+      "settings": {
+        "condition": "$status$ = 'SUCCESS' AND $row_count$ > 0"
+      }
+    },
+    {
+      "node_id": "4",
+      "node_type": "Call Workflow",
+      "node_name": "Execute Silver Transformation",
+      "visual_position": {"x": 700, "y": 200},
+      "settings": {
+        "workflow_path": "workflow-configuration-71.json",
+        "wait_for_completion": true,
+        "timeout_minutes": 20
+      }
+    },
+    {
+      "node_id": "5",
+      "node_type": "IF Switch",
+      "node_name": "Check Silver Success",
+      "visual_position": {"x": 900, "y": 200},
+      "settings": {
+        "condition": "$status$ = 'SUCCESS' AND $row_count$ > 0"
+      }
+    },
+    {
+      "node_id": "6",
+      "node_type": "Call Workflow",
+      "node_name": "Execute Gold ML Predictions",
+      "visual_position": {"x": 1100, "y": 200},
+      "settings": {
+        "workflow_path": "workflow-configuration-107.json",
+        "wait_for_completion": true,
+        "timeout_minutes": 25
+      }
+    },
+    {
+      "node_id": "7",
+      "node_type": "Call Workflow",
+      "node_name": "Run Data Quality Checks",
+      "visual_position": {"x": 700, "y": 400},
+      "settings": {
+        "workflow_path": "workflow-configuration-representation-70.json",
+        "wait_for_completion": false,
+        "timeout_minutes": 15
+      }
+    },
+    {
+      "node_id": "8",
+      "node_type": "Database Reader",
+      "node_name": "Read Pipeline Metrics",
+      "visual_position": {"x": 1100, "y": 400},
+      "settings": {
+        "query": "SELECT COUNT(*) as total_pus, SUM(CASE WHEN ESTADO_INVENTARIO='DESABASTECIDO' THEN 1 ELSE 0 END) as critical_pus FROM catalog_logistica.db_rollos.gold_plan_abastecimiento"
+      }
+    },
+    {
+      "node_id": "9",
+      "node_type": "Python Script",
+      "node_name": "Generate Dashboard Data",
+      "visual_position": {"x": 1300, "y": 300},
+      "settings": {
+        "script": "dashboard_metrics = {\n  'total_pus': 24382,\n  'critical_pus': df['critical_pus'].iloc[0],\n  'coverage_60d': df['total_pus'].iloc[0] - df['critical_pus'].iloc[0],\n  'execution_time': datetime.now().isoformat()\n}\ndf_dashboard = pd.DataFrame([dashboard_metrics])"
+      }
+    },
+    {
+      "node_id": "10",
+      "node_type": "Parquet Writer",
+      "node_name": "Export Pipeline Results",
+      "visual_position": {"x": 1300, "y": 500},
+      "settings": {
+        "output_path": "/Volumes/catalog_logistica/db_rollos/exports/pipeline_results.parquet",
+        "compression": "snappy"
+      }
+    },
+    {
+      "node_id": "11",
+      "node_type": "End IF",
+      "node_name": "Error Handler",
+      "visual_position": {"x": 500, "y": 600},
+      "settings": {
+        "on_error": "log_and_continue",
+        "notification_email": "andreys.mendoza7152@unaula.edu.co"
+      }
+    },
+    {
+      "node_id": "12",
+      "node_type": "Table View",
+      "node_name": "Display Final Metrics",
+      "visual_position": {"x": 1500, "y": 300},
+      "settings": {
+        "title": "Pipeline Execution Summary",
+        "auto_refresh": true
+      }
+    }
+  ],
+  "connections": [
+    {"from": "1", "to": "2"},
+    {"from": "2", "to": "3"},
+    {"from": "3", "to": "4", "port": "true"},
+    {"from": "3", "to": "11", "port": "false"},
+    {"from": "4", "to": "5"},
+    {"from": "5", "to": "6", "port": "true"},
+    {"from": "5", "to": "11", "port": "false"},
+    {"from": "4", "to": "7"},
+    {"from": "6", "to": "8"},
+    {"from": "8", "to": "9"},
+    {"from": "9", "to": "10"},
+    {"from": "9", "to": "12"}
+  ],
+  "annotations": [
+    {
+      "text": "MEDALLION ARCHITECTURE ORCHESTRATION",
+      "position": {"x": 600, "y": 50},
+      "style": "title"
+    },
+    {
+      "text": "Bronze Layer: Excel → Delta Ingestion",
+      "position": {"x": 300, "y": 100},
+      "style": "layer_label",
+      "color": "#CD7F32"
+    },
+    {
+      "text": "Silver Layer: Business Rules & Transformation",
+      "position": {"x": 700, "y": 100},
+      "style": "layer_label",
+      "color": "#C0C0C0"
+    },
+    {
+      "text": "Gold Layer: ML Predictions & Optimization",
+      "position": {"x": 1100, "y": 100},
+      "style": "layer_label",
+      "color": "#FFD700"
+    }
+  ],
+  "schedule": {
+    "enabled": true,
+    "cron_expression": "0 5 * * *",
+    "timezone": "UTC",
+    "description": "Daily execution at 05:00 UTC"
+  }
 }

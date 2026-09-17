@@ -1,2 +1,107 @@
 {
+  "workflow_name": "Silver_Layer_Transformation",
+  "description": "KNIME workflow for Silver layer - Business rules, imputation, classification",
+  "version": "1.0",
+  "nodes": [
+    {
+      "node_id": "1",
+      "node_type": "Database Reader",
+      "node_name": "Read Bronze Tables",
+      "settings": {
+        "connection": "databricks_unity_catalog",
+        "tables": [
+          "catalog_logistica.db_rollos.bronze_modelo_bigdata",
+          "catalog_logistica.db_rollos.bronze_stock_wompi",
+          "catalog_logistica.db_rollos.bronze_oc_agosto"
+        ]
+      }
+    },
+    {
+      "node_id": "2",
+      "node_type": "Joiner",
+      "node_name": "Join Bronze Tables",
+      "settings": {
+        "join_type": "left_outer",
+        "join_keys": ["NUM_CUENTA", "IDENTIFICACION"],
+        "composition_mode": "match_all"
+      }
+    },
+    {
+      "node_id": "3",
+      "node_type": "Rule Engine",
+      "node_name": "DEFAULT Imputation Logic",
+      "settings": {
+        "rules": [
+          "$CANTIDAD_ROLLOS_OC$ IS MISSING AND $STOCK_WOMPI_ROLLOS$ IS MISSING => 24",
+          "TRUE => COALESCE($CANTIDAD_ROLLOS_OC$, $STOCK_WOMPI_ROLLOS$, 0)"
+        ],
+        "output_column": "ROLLOS_FINAL"
+      }
+    },
+    {
+      "node_id": "4",
+      "node_type": "Math Formula",
+      "node_name": "Calculate SALDO",
+      "settings": {
+        "formula": "$ROLLOS_DISPONIBLES_INVENTARIO$ + $ROLLOS_TRANSITO$ + $ROLLOS_FINAL$ - $STOCK_WOMPI_ROLLOS$",
+        "output_column": "SALDO"
+      }
+    },
+    {
+      "node_id": "5",
+      "node_type": "Math Formula",
+      "node_name": "Calculate ROLLOS_REQUERIDOS",
+      "settings": {
+        "formula": "MAX(0, $PROM_TRANSACCIONES$ * 2 - $SALDO$)",
+        "output_column": "ROLLOS_REQUERIDOS"
+      }
+    },
+    {
+      "node_id": "6",
+      "node_type": "Rule Engine",
+      "node_name": "Classify ESTADO_INVENTARIO",
+      "settings": {
+        "rules": [
+          "$SALDO$ <= 0 OR $CANTIDAD_ROLLOS_OC$ > 0 => 'DESABASTECIDO'",
+          "$SALDO$ < 30 => 'CRITICO'",
+          "$SALDO$ >= 30 => 'ABASTECIDO'"
+        ],
+        "output_column": "ESTADO_INVENTARIO"
+      }
+    },
+    {
+      "node_id": "7",
+      "node_type": "Rule Engine",
+      "node_name": "Map SUGERENCIA_ACCION",
+      "settings": {
+        "rules": [
+          "$ESTADO_INVENTARIO$ = 'DESABASTECIDO' => 'DESPACHO INMEDIATO'",
+          "$ESTADO_INVENTARIO$ = 'CRITICO' => 'PEDIDO PREVENTIVO'",
+          "$ESTADO_INVENTARIO$ = 'ABASTECIDO' => 'MONITOREO'"
+        ],
+        "output_column": "SUGERENCIA_ACCION"
+      }
+    },
+    {
+      "node_id": "8",
+      "node_type": "Python Script",
+      "node_name": "Write to Delta Silver",
+      "settings": {
+        "script": "df.write.format('delta').mode('overwrite').saveAsTable('catalog_logistica.db_rollos.silver_inventario_consolidado')"
+      }
+    }
+  ],
+  "connections": [
+    {"from": "1", "to": "2"},
+    {"from": "2", "to": "3"},
+    {"from": "3", "to": "4"},
+    {"from": "4", "to": "5"},
+    {"from": "5", "to": "6"},
+    {"from": "6", "to": "7"},
+    {"from": "7", "to": "8"}
+  ],
+  "parameters": {
+    "critico_threshold": 30,
+    "default_imputation": 24
+  }
 }
