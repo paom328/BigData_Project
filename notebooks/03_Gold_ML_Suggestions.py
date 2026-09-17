@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "5"
+# ///
 # DBTITLE 1,Import libraries and define parameters
 # =============================================================================
 # 03_Gold_ML_Suggestions.py
@@ -117,7 +121,7 @@ df_gold = df_predictions.withColumn(
 ).withColumn(
     'LOTE_OPTIMO',
     F.ceil(
-        (F.lit(TARGET_COVERAGE) - F.col('SALDO_DIAS')) * F.col('PROM_TRANSACCIONES') / F.lit(30.0) / F.lit(12)
+        (F.col('SALDO_DIAS') - F.lit(TARGET_COVERAGE)) * F.col('PROM_TRANSACCIONES') / F.lit(30.0) / F.lit(12)
     ) * F.lit(12)
 ).withColumn(
     'LOTE_OPTIMO',
